@@ -1,0 +1,170 @@
+---
+title: "MA615_HW"
+author: "Donghao Xue"
+date: "09/25/2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Instruction
+
+For the problem of global warming, the most important thing is to see the fluctuation in temperature at a given time period. We have collected 20-years of data from NDBC station and in this program, I want to mainly focus on the changes of water temperature. So, I approach this problem in three ways. Firstly, I make a plot of the daily water temperature at a fixed time (12pm) during the 20 years. Then I fit a regression line to the data to see the trend. Second, I make a plot of average water temperature of December in each year with regression line. Finally I make a plot of maximum temperature of each year and also summary the regression.
+
+##Analysis
+
+```{r pressure, echo=FALSE}
+#Assemble the data into a single data frame
+url1 <- "http://www.ndbc.noaa.gov/view_text_file.php?filename=mlrf1h"
+url2 <- ".txt.gz&dir=data/historical/stdmet/"
+
+years <- c(1987:2016)
+
+urls <- str_c(url1, years, url2, sep ="")
+
+filenames <- str_c("mr", years, sep = "")
+
+N <- length(urls)
+
+
+for (i in 1:N){
+  suppressMessages(
+    assign(filenames[i], read.table(urls[i], header = TRUE,fill = T))
+  )
+  file <- get(filenames[i])
+  
+}
+
+# add 19 in front of year
+for (i in 1:12){
+  file <- get(filenames[i])
+  file$YY <- file$YY +1900
+  assign(filenames[i],file)
+}
+
+#remove the last column
+for (i in 14:18){
+  file <- get(filenames[i])
+  assign(filenames[i],file[,1:16])
+}
+
+#throw out the "mm" column and the lasr column
+for (i in 19:30){
+  file <- get(filenames[i])
+  assign(filenames[i],file[,c(1:4,6:17)])
+}
+
+#combine all the data frame and unify the column name
+for (i in 1:30){
+  file <- get(filenames[i])
+  
+  colnames(file) <- c("YYYY", "MM", "DD", "hh", "WD", "WSPD", "GST", "WVHT", "DPD", "APD", "MWD", "BAR", "ATMP", "WTMP", "DEWP", "VIS")
+  
+  if(i==1){
+    MR <- file
+  }
+  else{
+    MR <- rbind.data.frame(MR, file)
+  }
+}
+
+#select columns that are not 99, 999
+MR <- MR[,c(1:7,12:14)]
+
+#filter rows that ATMP and WTMP are larger than 100
+MR <- filter(MR,MR$ATMP<100&MR$WTMP<100)
+
+write.csv(MR,"MR.csv")
+
+#combine all the time into one column using lubridate package
+MR_DATE <- MR %>%
+  mutate(DATETIME = make_datetime(YYYY,MM,DD,hh))
+
+#change the order of each column, put the time into first place.
+MR_DATE <- MR_DATE[,5:11]
+cols <- colnames(MR_DATE)
+new_cols <- c(cols[7],cols[1:6])
+MR_DATE <- MR_DATE[,new_cols]
+
+write.csv(MR_DATE,"MR_DATE.CSV")
+
+
+```
+
+```{r cars}
+#Comparing daily water temperature at 12pm
+Date = read.csv("MR_DATE.csv")
+
+Date_1 = filter(Date, Date$WTMP<800, Date$ATMP<800)
+
+x1 = grep("12:00:00", Date_1$DATETIME)
+y1 = Date_1$WTMP[x1]
+x2 = c(1:length(x1))
+data1 = data.frame(x2,y1)
+
+ggplot(data=data1, mapping=aes(x = x2, y = y1))+geom_point()+geom_smooth()+scale_x_continuous(breaks=seq(0,10146,365),labels=c(1988:2015))+
+  xlab("Daily time at 12pm")+ylab("Water temperature")
+
+fit_1 = stan_glm(y1~x2,data = Date_1, refresh=0)
+
+summary(fit_1, digits=5)
+```
+
+```{r cars}
+#comparing average water temperature of December every year
+x1 = grep("-12-",Date_1$DATETIME)
+
+y1 = Date_1$WTMP[x1]
+
+y2 =c()
+for (i in 1987:2016){
+  y2= append(y2, mean(y1[grep(i, Date_1$DATETIME[x1])]))
+}
+
+
+x = c(1987:2016)
+plot(x , y2 , xlab = "year", ylab = "average WTMP in December")
+
+fit_2 = stan_glm(y2 ~ x, data = data.frame(x,y2), refresh=0)
+print(fit_2,digits=5)
+abline(fit_2)
+```
+
+
+
+```{r cars}
+#comparing maximum temperature every year
+y1 = c()
+for(i in 1988:2016){
+  y1 = append(y1, max(Date_1$WTMP[grep(i, Date_1$DATETIME)]))  
+
+}
+
+x = c(1988:2016)
+
+x1 = grep(3898, Date_1$DATETIME)
+y = max(Date_1$WTMP[x1])
+y1[11]=32.1
+
+plot(x , y1 , xlab = "year", ylab = "Maximum temperature each year")
+
+fit_3 = stan_glm(y1 ~ x, refresh=0)
+print(fit_3,digits=5)
+abline(fit_3)
+```
+
+
+##Discussion
+From the plot of daily temperature, it shows that the trend of temperature is fluctuant, and from the summary of regression, the slope of the regression line is very close to zero. Therefore it is not evident to conclude that the temperature is increasing.
+
+From the plot of average temperature in December for each year, it clearly shows that the there is a positive slope of regression line. From the summary of regression, the slope of regression line is 0.01 which is more evident than the slope of regression line in the last plot.
+
+From the plot of maximum temperature in each year, the slope of the regression line is also about 0.01. This result can show that there is a slightly increasing tendency of maximum temperature in each year.
+
+
+##Conclusion
+In general, the second and third plot give us evidence that there is a slightly increasing trend in water temperature with each passing year. However, due to the sample size is not very large, the subtle change in temperature cannot prove the existence of global warming directly. I think we need more data to analysis and include more factors so that we can get a more accurate result to show the problem of global warming.
+
+
